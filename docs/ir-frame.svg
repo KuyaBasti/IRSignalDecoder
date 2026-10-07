@@ -1,0 +1,258 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1044" width="1000" height="1044" role="img" aria-label="IR Signal Decoder, anatomy of one IR frame on PIN_58, the IR demodulator output, which idles high and goes low during each burst. A frame is 13 low pulses: a start pulse longer than 2000 microseconds, then 12 data pulses. Every falling edge clears the SysTick counter; the rising edge computes delta, the low time in microseconds, as TICKS_TO_US(3,200,000 minus SysTickValueGet()). High gaps are never timed. With edge_counter 0, a pulse of 2000 microseconds or less aborts the frame; longer is the start bit. With edge_counter 1 to 12, data is shifted left and a pulse of 1000 microseconds or less sets the new bit to 1, a longer one leaves it 0. The first data bit ends up as bit 11, so the code is read MSB first. Example: button 2, 0111 1110 1111, 0x7EF. When edge_counter reaches 13 on the rising edge that ends pulse 12, the handler sets pin_out_intflag and closes the frame; the main loop polls the flag, clears it and, past a 200 millisecond repeat gate, reads data, which the next falling edge resets to 0.">
+  <style>
+    .bg{fill:#ffffff}
+    .title{fill:#1f2328;font:600 22px -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
+    .sub{fill:#59636e;font:14px -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
+    .lbl{fill:#1f2328;font:600 14px -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
+    .note{fill:#59636e;font:12px -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
+    .glbl{fill:#59636e;font:600 12px -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;letter-spacing:.06em}
+    .elbl{fill:#59636e;font:11px -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
+    .edge{stroke:#818b98;stroke-width:1.6;fill:none}
+    .edge-dash{stroke:#818b98;stroke-width:1.6;fill:none;stroke-dasharray:6 4}
+    .arrow{fill:#818b98}
+    .group{fill:none;stroke:#d1d9e0;stroke-width:1.2;stroke-dasharray:4 4}
+    .b-blue{fill:#ddf4ff;stroke:#54aeff;stroke-width:1.5}
+    .b-green{fill:#dafbe1;stroke:#4ac26b;stroke-width:1.5}
+    .b-purple{fill:#fbefff;stroke:#c297ff;stroke-width:1.5}
+    .b-orange{fill:#fff1e5;stroke:#fb8f44;stroke-width:1.5}
+    .b-gray{fill:#f6f8fa;stroke:#d1d9e0;stroke-width:1.5}
+    .b-red{fill:#ffebe9;stroke:#ff8182;stroke-width:1.5}
+    .b-planned{fill:none;stroke:#818b98;stroke-width:1.4;stroke-dasharray:5 4}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+    .wire{stroke:#59636e;stroke-width:1.4;fill:none}
+    .dot{fill:#59636e}
+    @media (prefers-color-scheme: dark){
+      .bg{fill:#0d1117}
+      .title,.lbl{fill:#e6edf3}
+      .sub,.note,.glbl,.elbl{fill:#9198a1}
+      .edge,.edge-dash{stroke:#9198a1}
+      .arrow{fill:#9198a1}
+      .group{stroke:#3d444d}
+      .b-blue{fill:#0c2d6b;stroke:#4493f8}
+      .b-green{fill:#0f3b1e;stroke:#3fb950}
+      .b-purple{fill:#2e1a4f;stroke:#ab7df8}
+      .b-orange{fill:#3d1f0a;stroke:#f0883e}
+      .b-gray{fill:#151b23;stroke:#3d444d}
+      .b-red{fill:#3c1618;stroke:#f85149}
+      .b-planned{stroke:#9198a1}
+      .wire{stroke:#9198a1}
+      .dot{fill:#9198a1}
+    }
+  </style>
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="arrow" d="M0,0 L10,5 L0,10 z"/>
+    </marker>
+  </defs>
+  <rect class="bg" width="1000" height="1044" rx="12"/>
+  <text class="title" x="32" y="48">IR Signal Decoder — anatomy of an IR frame</text>
+  <text class="sub" x="32" y="74">Every low pulse is timed by SysTick: a start pulse over 2000 µs, then 12 data pulses, ≤ 1000 µs = 1, longer = 0, MSB first.</text>
+
+  <!-- ============ (1) ONE FRAME ON PIN_58 ============ -->
+  <rect class="group" x="24" y="96" width="952" height="290" rx="12"/>
+  <text class="glbl" x="40" y="120">ONE FRAME ON PIN_58: 13 LOW PULSES — BUTTON 2, CODE 0x7EF</text>
+  <text class="elbl mono" x="960" y="120" text-anchor="end">main.c 116–172</text>
+  <text class="elbl mono" x="40" y="184">edge_counter</text>
+  <text class="lbl mono" x="40" y="233">PIN_58</text>
+  <text class="elbl" x="128" y="204" text-anchor="end">high</text>
+  <text class="elbl" x="128" y="260" text-anchor="end">low</text>
+  <text class="elbl" x="40" y="278">data bit</text>
+  <line class="edge-dash" x1="170" y1="158" x2="170" y2="200"/>
+  <text class="elbl" x="176" y="154">first falling edge: frame opens, data = 0, edge_counter = 0</text>
+  <line class="edge-dash" x1="926" y1="158" x2="926" y2="200"/>
+  <text class="elbl" x="920" y="154" text-anchor="end">pulse 12 ends: edge_counter = 13, pin_out_intflag = 1</text>
+  <rect class="b-blue" x="174" y="204" width="112" height="48" rx="3"/>
+  <text class="lbl" x="230" y="233" text-anchor="middle">start</text>
+  <text class="elbl mono" x="230" y="184" text-anchor="middle">0</text>
+  <rect class="b-orange" x="316" y="204" width="48" height="48" rx="3"/>
+  <text class="lbl mono" x="340" y="233" text-anchor="middle">0</text>
+  <text class="elbl mono" x="340" y="184" text-anchor="middle">1</text>
+  <text class="elbl mono" x="340" y="278" text-anchor="middle">11</text>
+  <rect class="b-green" x="394" y="204" width="18" height="48" rx="3"/>
+  <text class="lbl mono" x="403" y="233" text-anchor="middle">1</text>
+  <text class="elbl mono" x="403" y="184" text-anchor="middle">2</text>
+  <text class="elbl mono" x="403" y="278" text-anchor="middle">10</text>
+  <rect class="b-green" x="442" y="204" width="18" height="48" rx="3"/>
+  <text class="lbl mono" x="451" y="233" text-anchor="middle">1</text>
+  <text class="elbl mono" x="451" y="184" text-anchor="middle">3</text>
+  <text class="elbl mono" x="451" y="278" text-anchor="middle">9</text>
+  <rect class="b-green" x="490" y="204" width="18" height="48" rx="3"/>
+  <text class="lbl mono" x="499" y="233" text-anchor="middle">1</text>
+  <text class="elbl mono" x="499" y="184" text-anchor="middle">4</text>
+  <text class="elbl mono" x="499" y="278" text-anchor="middle">8</text>
+  <rect class="b-green" x="538" y="204" width="18" height="48" rx="3"/>
+  <text class="lbl mono" x="547" y="233" text-anchor="middle">1</text>
+  <text class="elbl mono" x="547" y="184" text-anchor="middle">5</text>
+  <text class="elbl mono" x="547" y="278" text-anchor="middle">7</text>
+  <rect class="b-green" x="586" y="204" width="18" height="48" rx="3"/>
+  <text class="lbl mono" x="595" y="233" text-anchor="middle">1</text>
+  <text class="elbl mono" x="595" y="184" text-anchor="middle">6</text>
+  <text class="elbl mono" x="595" y="278" text-anchor="middle">6</text>
+  <rect class="b-green" x="634" y="204" width="18" height="48" rx="3"/>
+  <text class="lbl mono" x="643" y="233" text-anchor="middle">1</text>
+  <text class="elbl mono" x="643" y="184" text-anchor="middle">7</text>
+  <text class="elbl mono" x="643" y="278" text-anchor="middle">5</text>
+  <rect class="b-orange" x="682" y="204" width="48" height="48" rx="3"/>
+  <text class="lbl mono" x="706" y="233" text-anchor="middle">0</text>
+  <text class="elbl mono" x="706" y="184" text-anchor="middle">8</text>
+  <text class="elbl mono" x="706" y="278" text-anchor="middle">4</text>
+  <rect class="b-green" x="760" y="204" width="18" height="48" rx="3"/>
+  <text class="lbl mono" x="769" y="233" text-anchor="middle">1</text>
+  <text class="elbl mono" x="769" y="184" text-anchor="middle">9</text>
+  <text class="elbl mono" x="769" y="278" text-anchor="middle">3</text>
+  <rect class="b-green" x="808" y="204" width="18" height="48" rx="3"/>
+  <text class="lbl mono" x="817" y="233" text-anchor="middle">1</text>
+  <text class="elbl mono" x="817" y="184" text-anchor="middle">10</text>
+  <text class="elbl mono" x="817" y="278" text-anchor="middle">2</text>
+  <rect class="b-green" x="856" y="204" width="18" height="48" rx="3"/>
+  <text class="lbl mono" x="865" y="233" text-anchor="middle">1</text>
+  <text class="elbl mono" x="865" y="184" text-anchor="middle">11</text>
+  <text class="elbl mono" x="865" y="278" text-anchor="middle">1</text>
+  <rect class="b-green" x="904" y="204" width="18" height="48" rx="3"/>
+  <text class="lbl mono" x="913" y="233" text-anchor="middle">1</text>
+  <text class="elbl mono" x="913" y="184" text-anchor="middle">12</text>
+  <text class="elbl mono" x="913" y="278" text-anchor="middle">0</text>
+  <path class="wire" d="M136,200 H170 H170 V256 H290 V200 H312 V256 H368 V200 H390 V256 H416 V200 H438 V256 H464 V200 H486 V256 H512 V200 H534 V256 H560 V200 H582 V256 H608 V200 H630 V256 H656 V200 H678 V256 H734 V200 H756 V256 H782 V200 H804 V256 H830 V200 H852 V256 H878 V200 H900 V256 H926 V200 H952"/>
+  <path class="wire" d="M170,288 V294 H290 V288"/>
+  <text class="note" x="230" y="312" text-anchor="middle">&gt; 2000 µs</text>
+  <path class="wire" d="M312,288 V294 H926 V288"/>
+  <text class="note" x="619" y="312" text-anchor="middle">12 data pulses, first one = bit 11 (MSB first): 0111 1110 1111 = 0x7EF</text>
+  <rect class="b-blue" x="40" y="331" width="22" height="14" rx="3"/>
+  <text class="elbl" x="70" y="342">start: low &gt; 2000 µs</text>
+  <rect class="b-green" x="236" y="331" width="22" height="14" rx="3"/>
+  <text class="elbl" x="266" y="342">data: low ≤ 1000 µs → 1</text>
+  <rect class="b-orange" x="444" y="331" width="22" height="14" rx="3"/>
+  <text class="elbl" x="474" y="342">data: low &gt; 1000 µs → 0</text>
+  <path class="wire" d="M652,344 V332 H674 V344"/>
+  <text class="elbl" x="682" y="342">high gaps: never timed, no timeout</text>
+  <text class="elbl" x="40" y="364">PIN_58 is the IR demodulator output (GPIOA0, mask 0x8): idle high, low during each burst. Pulse widths are schematic; the code fixes only the thresholds.</text>
+
+  <!-- ============ (2) TIMING AND CLASSIFYING ONE LOW PULSE ============ -->
+  <rect class="group" x="24" y="406" width="952" height="318" rx="12"/>
+  <text class="glbl" x="40" y="430">EACH LOW PULSE — TIMED BETWEEN TWO GPIOA0IntHandler CALLS, THEN SORTED</text>
+  <text class="elbl mono" x="960" y="430" text-anchor="end">main.c 66–74, 122–161</text>
+  <text class="note" x="120" y="470" text-anchor="middle">falling edge</text>
+  <text class="note" x="340" y="470" text-anchor="middle">rising edge</text>
+  <path class="wire" d="M56,482 H120 V532 H340 V482 H420"/>
+  <line class="edge" x1="124" y1="512" x2="336" y2="512" marker-start="url(#ah)" marker-end="url(#ah)"/>
+  <text class="note" x="230" y="502" text-anchor="middle">delta = time spent low</text>
+  <line class="edge" x1="120" y1="536" x2="120" y2="556" marker-end="url(#ah)"/>
+  <rect class="b-gray" x="40" y="558" width="270" height="64" rx="10"/>
+  <text class="lbl" x="56" y="580">Falling edge (pin reads low)</text>
+  <text class="note mono" x="56" y="598">HWREG(NVIC_ST_CURRENT) = 1</text>
+  <text class="note" x="56" y="614">any write clears SysTick: stopwatch at 0</text>
+  <line class="edge" x1="340" y1="536" x2="340" y2="640" marker-end="url(#ah)"/>
+  <rect class="b-gray" x="40" y="642" width="430" height="64" rx="10"/>
+  <text class="lbl" x="56" y="664">Rising edge (pin reads high), only while reading_data</text>
+  <text class="note mono" x="56" y="682">delta = TICKS_TO_US(3,200,000 − SysTickValueGet())</text>
+  <text class="note" x="56" y="698">elapsed ticks ÷ 80 = µs at 80 MHz; range is one 40 ms SysTick period</text>
+  <text class="note" x="520" y="460"><tspan class="mono">edge_counter = 0</tspan>: is it the start pulse?</text>
+  <rect class="b-red" x="520" y="470" width="266" height="64" rx="8"/>
+  <text class="lbl" x="534" y="492">≤ 2000 µs → abort</text>
+  <text class="note" x="534" y="510">not a start bit: reading_data = false,</text>
+  <text class="note" x="534" y="526">edge_counter = 0, return</text>
+  <rect class="b-blue" x="786" y="470" width="164" height="64" rx="8"/>
+  <text class="lbl" x="800" y="492">&gt; 2000 µs</text>
+  <text class="note" x="800" y="510">start bit accepted,</text>
+  <text class="note" x="800" y="526">edge_counter → 1</text>
+  <text class="note" x="520" y="560"><tspan class="mono">edge_counter = 1–12</tspan>: <tspan class="mono">data &lt;&lt;= 1</tspan>, then</text>
+  <rect class="b-green" x="520" y="570" width="133" height="64" rx="8"/>
+  <text class="lbl" x="534" y="592">≤ 1000 µs</text>
+  <text class="note" x="534" y="610">bit = 1</text>
+  <text class="note mono" x="534" y="626">data |= 1</text>
+  <rect class="b-orange" x="653" y="570" width="297" height="64" rx="8"/>
+  <text class="lbl" x="667" y="592">&gt; 1000 µs</text>
+  <text class="note" x="667" y="610">bit = 0</text>
+  <text class="note" x="667" y="626">nothing ORed in: the shift left a 0</text>
+  <line class="wire" x1="520" y1="656" x2="958" y2="656" marker-end="url(#ah)"/>
+  <line class="wire" x1="520" y1="651" x2="520" y2="661"/>
+  <text class="elbl mono" x="520" y="676" text-anchor="middle">0</text>
+  <line class="wire" x1="653" y1="651" x2="653" y2="661"/>
+  <text class="elbl mono" x="653" y="676" text-anchor="middle">1000</text>
+  <line class="wire" x1="786" y1="651" x2="786" y2="661"/>
+  <text class="elbl mono" x="786" y="676" text-anchor="middle">2000</text>
+  <line class="wire" x1="919" y1="651" x2="919" y2="661"/>
+  <text class="elbl mono" x="906" y="676" text-anchor="start">3000 µs</text>
+
+  <!-- ============ (3) THE RESULT ============ -->
+  <rect class="group" x="24" y="744" width="952" height="280" rx="12"/>
+  <text class="glbl" x="40" y="768">THE RESULT — 12 BITS IN data, HANDED TO THE MAIN LOOP</text>
+  <text class="elbl mono" x="960" y="768" text-anchor="end">main.c 44–55, 155–169, 391–431</text>
+  <text class="elbl mono" x="40" y="802">edge_counter</text>
+  <text class="lbl mono" x="40" y="833">data</text>
+  <text class="elbl" x="40" y="862">bit</text>
+  <rect class="b-orange" x="150" y="812" width="30" height="32" rx="4"/>
+  <text class="lbl mono" x="165" y="833" text-anchor="middle">0</text>
+  <text class="elbl mono" x="165" y="802" text-anchor="middle">1</text>
+  <text class="elbl mono" x="165" y="862" text-anchor="middle">11</text>
+  <rect class="b-green" x="184" y="812" width="30" height="32" rx="4"/>
+  <text class="lbl mono" x="199" y="833" text-anchor="middle">1</text>
+  <text class="elbl mono" x="199" y="802" text-anchor="middle">2</text>
+  <text class="elbl mono" x="199" y="862" text-anchor="middle">10</text>
+  <rect class="b-green" x="218" y="812" width="30" height="32" rx="4"/>
+  <text class="lbl mono" x="233" y="833" text-anchor="middle">1</text>
+  <text class="elbl mono" x="233" y="802" text-anchor="middle">3</text>
+  <text class="elbl mono" x="233" y="862" text-anchor="middle">9</text>
+  <rect class="b-green" x="252" y="812" width="30" height="32" rx="4"/>
+  <text class="lbl mono" x="267" y="833" text-anchor="middle">1</text>
+  <text class="elbl mono" x="267" y="802" text-anchor="middle">4</text>
+  <text class="elbl mono" x="267" y="862" text-anchor="middle">8</text>
+  <rect class="b-green" x="300" y="812" width="30" height="32" rx="4"/>
+  <text class="lbl mono" x="315" y="833" text-anchor="middle">1</text>
+  <text class="elbl mono" x="315" y="802" text-anchor="middle">5</text>
+  <text class="elbl mono" x="315" y="862" text-anchor="middle">7</text>
+  <rect class="b-green" x="334" y="812" width="30" height="32" rx="4"/>
+  <text class="lbl mono" x="349" y="833" text-anchor="middle">1</text>
+  <text class="elbl mono" x="349" y="802" text-anchor="middle">6</text>
+  <text class="elbl mono" x="349" y="862" text-anchor="middle">6</text>
+  <rect class="b-green" x="368" y="812" width="30" height="32" rx="4"/>
+  <text class="lbl mono" x="383" y="833" text-anchor="middle">1</text>
+  <text class="elbl mono" x="383" y="802" text-anchor="middle">7</text>
+  <text class="elbl mono" x="383" y="862" text-anchor="middle">5</text>
+  <rect class="b-orange" x="402" y="812" width="30" height="32" rx="4"/>
+  <text class="lbl mono" x="417" y="833" text-anchor="middle">0</text>
+  <text class="elbl mono" x="417" y="802" text-anchor="middle">8</text>
+  <text class="elbl mono" x="417" y="862" text-anchor="middle">4</text>
+  <rect class="b-green" x="450" y="812" width="30" height="32" rx="4"/>
+  <text class="lbl mono" x="465" y="833" text-anchor="middle">1</text>
+  <text class="elbl mono" x="465" y="802" text-anchor="middle">9</text>
+  <text class="elbl mono" x="465" y="862" text-anchor="middle">3</text>
+  <rect class="b-green" x="484" y="812" width="30" height="32" rx="4"/>
+  <text class="lbl mono" x="499" y="833" text-anchor="middle">1</text>
+  <text class="elbl mono" x="499" y="802" text-anchor="middle">10</text>
+  <text class="elbl mono" x="499" y="862" text-anchor="middle">2</text>
+  <rect class="b-green" x="518" y="812" width="30" height="32" rx="4"/>
+  <text class="lbl mono" x="533" y="833" text-anchor="middle">1</text>
+  <text class="elbl mono" x="533" y="802" text-anchor="middle">11</text>
+  <text class="elbl mono" x="533" y="862" text-anchor="middle">1</text>
+  <rect class="b-green" x="552" y="812" width="30" height="32" rx="4"/>
+  <text class="lbl mono" x="567" y="833" text-anchor="middle">1</text>
+  <text class="elbl mono" x="567" y="802" text-anchor="middle">12</text>
+  <text class="elbl mono" x="567" y="862" text-anchor="middle">0</text>
+  <path class="wire" d="M150,872 V878 H282 V872"/>
+  <text class="lbl mono" x="216" y="898" text-anchor="middle">7</text>
+  <path class="wire" d="M300,872 V878 H432 V872"/>
+  <text class="lbl mono" x="366" y="898" text-anchor="middle">E</text>
+  <path class="wire" d="M450,872 V878 H582 V872"/>
+  <text class="lbl mono" x="516" y="898" text-anchor="middle">F</text>
+  <line class="edge" x1="590" y1="828" x2="636" y2="828" marker-end="url(#ah)"/>
+  <rect class="b-gray" x="640" y="796" width="312" height="64" rx="10"/>
+  <text class="lbl mono" x="656" y="818">data = 0x7EF</text>
+  <text class="note" x="656" y="836">button 2 in the hand-decoded table (main.c 46)</text>
+  <text class="note" x="656" y="852">switch case 0x7EF → letters a b c</text>
+  <rect class="b-gray" x="40" y="924" width="256" height="64" rx="10"/>
+  <text class="lbl" x="56" y="946">Pulse 12 ends (rising edge)</text>
+  <text class="note mono" x="56" y="964">edge_counter++ → 13</text>
+  <text class="note" x="56" y="980">the last data bit is already in</text>
+  <rect class="b-gray" x="336" y="924" width="200" height="64" rx="10"/>
+  <text class="lbl" x="352" y="946">Frame complete</text>
+  <text class="note mono" x="352" y="964">pin_out_intflag = 1</text>
+  <text class="note mono" x="352" y="980">reading_data = false</text>
+  <rect class="b-gray" x="576" y="924" width="376" height="64" rx="10"/>
+  <text class="lbl" x="592" y="946">Main loop</text>
+  <text class="note mono" x="592" y="964">if (pin_out_intflag)</text>
+  <text class="note" x="592" y="980">clears the flag; past the 200 ms repeat gate, reads data</text>
+  <line class="edge" x1="296" y1="956" x2="332" y2="956" marker-end="url(#ah)"/>
+  <line class="edge" x1="536" y1="956" x2="572" y2="956" marker-end="url(#ah)"/>
+  <text class="elbl" x="40" y="1016">data holds the code only until the next falling edge: with no frame open, that edge sets data = 0 and starts a new frame (main.c 129–134).</text>
+</svg>
