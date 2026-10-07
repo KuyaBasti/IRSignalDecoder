@@ -1,0 +1,231 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1772" width="1000" height="1772" role="img" aria-label="IR Signal Decoder, typing &quot;hi&quot; and sending it, as a sequence across the TV remote, board A's GPIO ISR, its main loop (the multi-tap engine), its text buffer and OLED, the UART1 link and board B. Each key press is an IR frame of a start pulse plus 12 data pulses that the ISR turns into pin_out_intflag and a 12-bit code (key 4 is 0x3EF); the main loop accepts it only if 200 ms have passed since the last accepted code. Press 1: a new key commits the still-empty curr_letter, x goes from 0 to 6, cycle 0 gives 'g', drawn at (6, 64). Press 2 within 1500 ms: same key, no commit, cycle 1 gives 'h', redrawn in the same cell. After 1500 ms or more with no key, press 3 commits 'h' into msg, x becomes 12 and 'g' is drawn at (12, 64); two more presses cycle to 'h' then 'i' in that cell. MUTE (0xD6F) commits 'i' so msg is &quot;hi&quot; and x is 18, appends '$', reports &quot;Message to be sent: hi$&quot; on the UART0 console, then UART1Send writes h, i, $ one byte at a time at 115200 8N1, followed by UtilsDelay(80000), about 3 ms per the README, message_sent = true and cycle = -1; MUTE draws nothing. Board B's loop sees UARTCharsAvail, UART1Receive keeps h and i and stops at '$' (20 characters max), reports &quot;Received: hi&quot;, erases its top row with fillRect(0, 0, 128, 9) and draws 'h' at (6, 0) and 'i' at (12, 0). Afterwards &quot;hi&quot; stays on A's row 64 until the next accepted key clears it.">
+  <style>
+    .bg{fill:#ffffff}
+    .title{fill:#1f2328;font:600 22px -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
+    .sub{fill:#59636e;font:14px -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
+    .lbl{fill:#1f2328;font:600 14px -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
+    .note{fill:#59636e;font:12px -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
+    .glbl{fill:#59636e;font:600 12px -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;letter-spacing:.06em}
+    .elbl{fill:#59636e;font:11px -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
+    .edge{stroke:#818b98;stroke-width:1.6;fill:none}
+    .edge-dash{stroke:#818b98;stroke-width:1.6;fill:none;stroke-dasharray:6 4}
+    .arrow{fill:#818b98}
+    .group{fill:none;stroke:#d1d9e0;stroke-width:1.2;stroke-dasharray:4 4}
+    .b-blue{fill:#ddf4ff;stroke:#54aeff;stroke-width:1.5}
+    .b-green{fill:#dafbe1;stroke:#4ac26b;stroke-width:1.5}
+    .b-purple{fill:#fbefff;stroke:#c297ff;stroke-width:1.5}
+    .b-orange{fill:#fff1e5;stroke:#fb8f44;stroke-width:1.5}
+    .b-gray{fill:#f6f8fa;stroke:#d1d9e0;stroke-width:1.5}
+    .b-red{fill:#ffebe9;stroke:#ff8182;stroke-width:1.5}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+    @media (prefers-color-scheme: dark){
+      .bg{fill:#0d1117}
+      .title,.lbl{fill:#e6edf3}
+      .sub,.note,.glbl,.elbl{fill:#9198a1}
+      .edge,.edge-dash{stroke:#9198a1}
+      .arrow{fill:#9198a1}
+      .group{stroke:#3d444d}
+      .b-blue{fill:#0c2d6b;stroke:#4493f8}
+      .b-green{fill:#0f3b1e;stroke:#3fb950}
+      .b-purple{fill:#2e1a4f;stroke:#ab7df8}
+      .b-orange{fill:#3d1f0a;stroke:#f0883e}
+      .b-gray{fill:#151b23;stroke:#3d444d}
+      .b-red{fill:#3c1618;stroke:#f85149}
+    }
+  </style>
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="arrow" d="M0,0 L10,5 L0,10 z"/>
+    </marker>
+  </defs>
+  <rect class="bg" width="1000" height="1772" rx="12"/>
+  <text class="title" x="32" y="48">IR Signal Decoder — typing "hi" and sending it</text>
+  <text class="sub" x="32" y="74">Board A from power-up (x = 0, msg empty, caps off): key 4 twice, a ≥ 1.5 s pause, key 4 three times, MUTE.</text>
+  <g>
+    <rect class="b-orange" x="32" y="92" width="12" height="12" rx="3"/>
+    <text class="elbl" x="50" y="102">hardware</text>
+    <rect class="b-blue" x="121" y="92" width="12" height="12" rx="3"/>
+    <text class="elbl" x="139" y="102">A: interrupt</text>
+    <rect class="b-green" x="235" y="92" width="12" height="12" rx="3"/>
+    <text class="elbl" x="253" y="102">A: main loop</text>
+    <rect class="b-gray" x="349" y="92" width="12" height="12" rx="3"/>
+    <text class="elbl" x="367" y="102">A: RAM</text>
+    <rect class="b-purple" x="426" y="92" width="12" height="12" rx="3"/>
+    <text class="elbl" x="444" y="102">UART1 wire</text>
+    <rect class="b-red" x="528" y="92" width="12" height="12" rx="3"/>
+    <text class="elbl" x="546" y="102">board B</text>
+    <line class="edge" x1="32" y1="122" x2="62" y2="122" marker-end="url(#ah)"/>
+    <text class="elbl" x="70" y="126">signal or call</text>
+    <line class="edge-dash" x1="160" y1="122" x2="190" y2="122" marker-end="url(#ah)"/>
+    <text class="elbl" x="198" y="126">flag the main loop polls</text>
+    <line class="group" x1="342" y1="122" x2="372" y2="122"/>
+    <text class="elbl" x="380" y="126">time passes</text>
+  </g>
+  <g>
+    <rect class="group" x="128" y="140" width="616" height="92" rx="10"/>
+    <text class="glbl" x="140" y="157">BOARD A</text>
+    <rect class="group" x="856" y="140" width="120" height="92" rx="10"/>
+    <text class="glbl" x="868" y="157">BOARD B</text>
+  </g>
+  <g>
+    <line class="group" x1="72" y1="222" x2="72" y2="1700"/>
+    <line class="group" x1="188" y1="222" x2="188" y2="1700"/>
+    <line class="group" x1="306" y1="222" x2="306" y2="1700"/>
+    <line class="group" x1="566" y1="222" x2="566" y2="1700"/>
+    <line class="group" x1="684" y1="222" x2="684" y2="1700"/>
+    <line class="group" x1="800" y1="222" x2="800" y2="1700"/>
+    <line class="group" x1="916" y1="222" x2="916" y2="1700"/>
+    <rect class="b-orange" x="22" y="166" width="100" height="56" rx="10"/>
+    <text class="lbl" x="72" y="189" text-anchor="middle">TV remote</text>
+    <text class="note" x="72" y="208" text-anchor="middle">IR → PIN_58</text>
+    <rect class="b-blue" x="142" y="166" width="92" height="56" rx="10"/>
+    <text class="lbl" x="188" y="189" text-anchor="middle">GPIO ISR</text>
+    <text class="note" x="188" y="208" text-anchor="middle">both edges</text>
+    <rect class="b-green" x="246" y="166" width="120" height="56" rx="10"/>
+    <text class="lbl" x="306" y="189" text-anchor="middle">Main loop</text>
+    <text class="note" x="306" y="208" text-anchor="middle">multi-tap engine</text>
+    <rect class="b-gray" x="516" y="166" width="100" height="56" rx="10"/>
+    <text class="lbl" x="566" y="189" text-anchor="middle">Text buffer</text>
+    <text class="note" x="566" y="208" text-anchor="middle">msg[50], x</text>
+    <rect class="b-orange" x="634" y="166" width="100" height="56" rx="10"/>
+    <text class="lbl" x="684" y="189" text-anchor="middle">OLED (A)</text>
+    <text class="note" x="684" y="208" text-anchor="middle">row y = 64</text>
+    <rect class="b-purple" x="750" y="166" width="100" height="56" rx="10"/>
+    <text class="lbl" x="800" y="189" text-anchor="middle">UART1 link</text>
+    <text class="note" x="800" y="208" text-anchor="middle">115200 8N1</text>
+    <rect class="b-red" x="866" y="166" width="100" height="56" rx="10"/>
+    <text class="lbl" x="916" y="189" text-anchor="middle">Board B</text>
+    <text class="note" x="916" y="208" text-anchor="middle">same main.c</text>
+  </g>
+  <g>
+    <line class="edge" x1="84" y1="284" x2="187" y2="284" marker-end="url(#ah)"/>
+    <line class="edge-dash" x1="188" y1="284" x2="305" y2="284" marker-end="url(#ah)"/>
+    <circle class="b-orange" cx="72" cy="284" r="12"/>
+    <text class="lbl" x="72" y="289" text-anchor="middle">1</text>
+    <text class="note" x="136" y="260" text-anchor="middle">key 4: start +</text>
+    <text class="note" x="136" y="276" text-anchor="middle">12 data pulses</text>
+    <text class="note" x="247" y="260" text-anchor="middle">pin_out_intflag,</text>
+    <text class="note" x="247" y="276" text-anchor="middle">data = 0x3EF</text>
+    <path class="edge" d="M318,330 H332 Q340,330 340,338 V344 Q340,352 332,352 H308" marker-end="url(#ah)"/>
+    <circle class="b-green" cx="306" cy="330" r="12"/>
+    <text class="lbl" x="306" y="335" text-anchor="middle">2</text>
+    <text class="note" x="350" y="337">repeat gate, every press: ≥ 200 ms</text>
+    <text class="note" x="350" y="353">since the last accepted code</text>
+    <line class="edge" x1="318" y1="408" x2="565" y2="408" marker-end="url(#ah)"/>
+    <circle class="b-green" cx="306" cy="408" r="12"/>
+    <text class="lbl" x="306" y="413" text-anchor="middle">3</text>
+    <text class="note" x="442" y="384" text-anchor="middle">new key → commit <tspan class="mono">curr_letter</tspan>, still 0</text>
+    <text class="note" x="442" y="400" text-anchor="middle">msg stays empty, x 0 → 6, cycle = 0</text>
+    <path class="edge" d="M318,448 H332 Q340,448 340,456 V462 Q340,470 332,470 H308" marker-end="url(#ah)"/>
+    <circle class="b-green" cx="306" cy="448" r="12"/>
+    <text class="lbl" x="306" y="453" text-anchor="middle">4</text>
+    <text class="note" x="350" y="455">case 0x3EF: cycle %= 3 → 0</text>
+    <text class="note" x="350" y="471"><tspan class="mono">curr_letter</tspan> = 'g' + 0 = 'g'</text>
+    <line class="edge" x1="318" y1="526" x2="683" y2="526" marker-end="url(#ah)"/>
+    <circle class="b-green" cx="306" cy="526" r="12"/>
+    <text class="lbl" x="306" y="531" text-anchor="middle">5</text>
+    <text class="note" x="442" y="518" text-anchor="middle"><tspan class="mono">drawChar</tspan> 'g' at (6, 64)</text>
+    <line class="edge" x1="84" y1="584" x2="187" y2="584" marker-end="url(#ah)"/>
+    <line class="edge-dash" x1="188" y1="584" x2="305" y2="584" marker-end="url(#ah)"/>
+    <circle class="b-orange" cx="72" cy="584" r="12"/>
+    <text class="lbl" x="72" y="589" text-anchor="middle">6</text>
+    <text class="note" x="136" y="560" text-anchor="middle">key 4 again,</text>
+    <text class="note" x="136" y="576" text-anchor="middle">&lt; 1500 ms later</text>
+    <text class="note" x="247" y="576" text-anchor="middle">0x3EF</text>
+    <path class="edge" d="M318,628 H332 Q340,628 340,636 V642 Q340,650 332,650 H308" marker-end="url(#ah)"/>
+    <circle class="b-green" cx="306" cy="628" r="12"/>
+    <text class="lbl" x="306" y="633" text-anchor="middle">7</text>
+    <text class="note" x="350" y="635">same key, &lt; 1500 ms → no commit,</text>
+    <text class="note" x="350" y="651">cycle++ → 1 → 'h'</text>
+    <line class="edge" x1="318" y1="706" x2="683" y2="706" marker-end="url(#ah)"/>
+    <circle class="b-green" cx="306" cy="706" r="12"/>
+    <text class="lbl" x="306" y="711" text-anchor="middle">8</text>
+    <text class="note" x="442" y="682" text-anchor="middle"><tspan class="mono">drawChar</tspan> 'h' at (6, 64)</text>
+    <text class="note" x="442" y="698" text-anchor="middle">same cell, drawn over 'g'</text>
+    <line class="group" x1="24" y1="750" x2="976" y2="750"/>
+    <text class="note" x="442" y="742" text-anchor="middle">≥ 1500 ms pass, no key pressed</text>
+    <line class="edge" x1="84" y1="810" x2="187" y2="810" marker-end="url(#ah)"/>
+    <line class="edge-dash" x1="188" y1="810" x2="305" y2="810" marker-end="url(#ah)"/>
+    <circle class="b-orange" cx="72" cy="810" r="12"/>
+    <text class="lbl" x="72" y="815" text-anchor="middle">9</text>
+    <text class="note" x="136" y="786" text-anchor="middle">key 4,</text>
+    <text class="note" x="136" y="802" text-anchor="middle">≥ 1500 ms later</text>
+    <text class="note" x="247" y="802" text-anchor="middle">0x3EF</text>
+    <line class="edge" x1="318" y1="876" x2="565" y2="876" marker-end="url(#ah)"/>
+    <circle class="b-green" cx="306" cy="876" r="12"/>
+    <text class="lbl" x="306" y="881" text-anchor="middle">10</text>
+    <text class="note" x="442" y="852" text-anchor="middle">same key, but ≥ 1500 ms → commit 'h'</text>
+    <text class="note" x="442" y="868" text-anchor="middle">msg = "h", x 6 → 12, cycle = 0 → 'g'</text>
+    <line class="edge" x1="318" y1="936" x2="683" y2="936" marker-end="url(#ah)"/>
+    <circle class="b-green" cx="306" cy="936" r="12"/>
+    <text class="lbl" x="306" y="941" text-anchor="middle">11</text>
+    <text class="note" x="442" y="928" text-anchor="middle"><tspan class="mono">drawChar</tspan> 'g' at (12, 64)</text>
+    <line class="edge" x1="84" y1="994" x2="187" y2="994" marker-end="url(#ah)"/>
+    <line class="edge-dash" x1="188" y1="994" x2="305" y2="994" marker-end="url(#ah)"/>
+    <circle class="b-orange" cx="72" cy="994" r="12"/>
+    <text class="lbl" x="72" y="999" text-anchor="middle">12</text>
+    <text class="note" x="136" y="970" text-anchor="middle">key 4 twice,</text>
+    <text class="note" x="136" y="986" text-anchor="middle">&lt; 1500 ms apart</text>
+    <text class="note" x="247" y="986" text-anchor="middle">0x3EF ×2</text>
+    <path class="edge" d="M318,1038 H332 Q340,1038 340,1046 V1052 Q340,1060 332,1060 H308" marker-end="url(#ah)"/>
+    <circle class="b-green" cx="306" cy="1038" r="12"/>
+    <text class="lbl" x="306" y="1043" text-anchor="middle">13</text>
+    <text class="note" x="350" y="1045">same key → no commit,</text>
+    <text class="note" x="350" y="1061">cycle 1 → 'h', then 2 → 'i'</text>
+    <line class="edge" x1="318" y1="1116" x2="683" y2="1116" marker-end="url(#ah)"/>
+    <circle class="b-green" cx="306" cy="1116" r="12"/>
+    <text class="lbl" x="306" y="1121" text-anchor="middle">14</text>
+    <text class="note" x="442" y="1092" text-anchor="middle"><tspan class="mono">drawChar</tspan> 'h' at (12, 64), then</text>
+    <text class="note" x="442" y="1108" text-anchor="middle">'i' at (12, 64), same cell</text>
+    <line class="edge" x1="84" y1="1174" x2="187" y2="1174" marker-end="url(#ah)"/>
+    <line class="edge-dash" x1="188" y1="1174" x2="305" y2="1174" marker-end="url(#ah)"/>
+    <circle class="b-orange" cx="72" cy="1174" r="12"/>
+    <text class="lbl" x="72" y="1179" text-anchor="middle">15</text>
+    <text class="note" x="136" y="1166" text-anchor="middle">MUTE</text>
+    <text class="note" x="247" y="1166" text-anchor="middle">0xD6F</text>
+    <line class="edge" x1="318" y1="1240" x2="565" y2="1240" marker-end="url(#ah)"/>
+    <circle class="b-green" cx="306" cy="1240" r="12"/>
+    <text class="lbl" x="306" y="1245" text-anchor="middle">16</text>
+    <text class="note" x="442" y="1200" text-anchor="middle">new key → commit 'i': msg = "hi",</text>
+    <text class="note" x="442" y="1216" text-anchor="middle">x 12 → 18, cycle = 0;</text>
+    <text class="note" x="442" y="1232" text-anchor="middle">then case 0xD6F appends '$' → "hi$"</text>
+    <path class="edge" d="M318,1284 H332 Q340,1284 340,1292 V1298 Q340,1306 332,1306 H308" marker-end="url(#ah)"/>
+    <circle class="b-green" cx="306" cy="1284" r="12"/>
+    <text class="lbl" x="306" y="1289" text-anchor="middle">17</text>
+    <text class="note" x="350" y="1291"><tspan class="mono">Report</tspan> → UART0 console:</text>
+    <text class="note" x="350" y="1307">"Message to be sent: hi$"</text>
+    <line class="edge" x1="318" y1="1362" x2="799" y2="1362" marker-end="url(#ah)"/>
+    <circle class="b-green" cx="306" cy="1362" r="12"/>
+    <text class="lbl" x="306" y="1367" text-anchor="middle">18</text>
+    <text class="note" x="442" y="1338" text-anchor="middle"><tspan class="mono">UART1Send("hi$")</tspan>, 115200 8N1:</text>
+    <text class="note" x="442" y="1354" text-anchor="middle">waits out <tspan class="mono">UARTBusy</tspan> before each byte</text>
+    <line class="edge" x1="812" y1="1398" x2="915" y2="1398" marker-end="url(#ah)"/>
+    <circle class="b-purple" cx="800" cy="1398" r="12"/>
+    <text class="lbl" x="800" y="1403" text-anchor="middle">19</text>
+    <text class="note" x="864" y="1374" text-anchor="middle">'h' 'i' '$'</text>
+    <text class="note" x="864" y="1390" text-anchor="middle">TX1 → RX1</text>
+    <path class="edge" d="M318,1424 H332 Q340,1424 340,1432 V1438 Q340,1446 332,1446 H308" marker-end="url(#ah)"/>
+    <circle class="b-green" cx="306" cy="1424" r="12"/>
+    <text class="lbl" x="306" y="1429" text-anchor="middle">20</text>
+    <text class="note" x="350" y="1431"><tspan class="mono">UtilsDelay(80000)</tspan>, ≈ 3 ms;</text>
+    <text class="note" x="350" y="1447">message_sent = true, cycle = −1;</text>
+    <text class="note" x="350" y="1463">MUTE draws nothing</text>
+    <rect class="b-red" x="572" y="1502" width="394" height="52" rx="8"/>
+    <circle class="b-red" cx="594" cy="1528" r="12"/>
+    <text class="lbl" x="594" y="1533" text-anchor="middle">21</text>
+    <text class="note" x="616" y="1524">B's loop sees <tspan class="mono">UARTCharsAvail</tspan> → <tspan class="mono">UART1Receive</tspan> spins:</text>
+    <text class="note" x="616" y="1540">keeps 'h', 'i', stops at '$' (20 chars max)</text>
+    <rect class="b-red" x="572" y="1566" width="394" height="52" rx="8"/>
+    <circle class="b-red" cx="594" cy="1592" r="12"/>
+    <text class="lbl" x="594" y="1597" text-anchor="middle">22</text>
+    <text class="note" x="616" y="1588"><tspan class="mono">Report</tspan> → B's console: "Received: hi";</text>
+    <text class="note" x="616" y="1604"><tspan class="mono">fillRect(0, 0, 128, 9)</tspan> erases B's top row</text>
+    <rect class="b-red" x="572" y="1630" width="394" height="52" rx="8"/>
+    <circle class="b-red" cx="594" cy="1656" r="12"/>
+    <text class="lbl" x="594" y="1661" text-anchor="middle">23</text>
+    <text class="note" x="616" y="1652"><tspan class="mono">drawChar</tspan> 'h' at (6, 0), 'i' at (12, 0)</text>
+    <text class="note" x="616" y="1668">on B's own OLED, rx = 6, += 6 per char</text>
+  </g>
+  <text class="note" x="32" y="1724">Afterwards "hi" stays on A's row 64 until the next accepted key, which first clears it: <tspan class="mono">fillRect(0, 64, 128, 9)</tspan>, x = 6, msg = "".</text>
+  <text class="note" x="32" y="1744">Per the README, not the code: <tspan class="mono">UtilsDelay(80000)</tspan> ≈ 3 ms, and board B is a second CC3200 running the same firmware, A's TX1 wired to B's RX1.</text>
+</svg>

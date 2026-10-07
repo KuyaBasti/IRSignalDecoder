@@ -1,10 +1,12 @@
 # IR Signal Decoder
 
-A CC3200 that turns a TV remote into a phone keypad. A GPIO interrupt watches the output of an IR demodulator on **PIN_58** and times every low pulse against a free-running **SysTick** — a start pulse longer than 2 ms opens a frame, then twelve pulse-widths are shifted MSB-first into a **12-bit button code** (`0x7EF` is the "2/ABC" key, `0xD6F` is MUTE). The main loop feeds accepted codes into a **multi-tap texting engine** — press 4 twice for "h", old-phone style — draws the message live on a **128×128 SSD1351 OLED** over SPI, and on MUTE ships it as a `'$'`-terminated byte stream over **UART1** to a second CC3200 running the same firmware, which prints it on *its* screen. Two boards, two remotes, SMS from 2003.
+<p align="center"><img src="docs/system-overview.svg" alt="IR Signal Decoder system overview. A TV remote's IR bursts reach an IR receiver (a demodulator with active-low output) wired to PIN_58 of a CC3200 LaunchPad. On the board, a GPIO interrupt fires on both edges: it restarts the SysTick timer (40 ms reload at 80 MHz) on each falling edge, reads the elapsed microseconds on each rising edge, and decodes a start pulse longer than 2 ms plus 12 bits into a 12-bit button code. The multi-tap main loop also reads global_time from the SysTick handler; it turns codes into letters, and the MUTE key sends the message. The loop draws text with drawChar and fillRect through the display stack (Adafruit GFX plus the OLED driver), which drives a 128x128 SSD1351 OLED over 100 kHz SPI, with received text on row 0 and the message being typed on row 64. The loop logs with Report() over UART0 to a serial terminal on the LaunchPad USB backchannel. Through the UART1 link, at 115200 8N1, it sends the message with a trailing dollar sign to a second CC3200 running the same firmware and receives that board's messages." width="100%"></p>
 
-The interesting part isn't the OLED plumbing — it's how little state the whole thing runs on. The ISR is nothing but a **shift register with a stopwatch**: one `data` int, one edge counter, one flag. Every decision that feels like it needs a timer callback — "is this a repeat frame?", "same key again, or a new letter?" — is made *lazily in the main loop* by comparing against a 40 ms-granularity wall clock that the same SysTick maintains as a side job. Even the multi-tap commit is lazy: the letter you're cycling through is drawn on screen immediately but only lands in the message buffer **when the next keypress proves you're done with it**.
+A CC3200 that turns a TV remote into a phone keypad. A GPIO interrupt watches the output of an IR demodulator on **PIN_58** and times every low pulse against **SysTick**, which it restarts on each falling edge — a start pulse longer than 2 ms opens a frame, then twelve pulse-widths are shifted MSB-first into a **12-bit button code** (`0x7EF` is the "2/ABC" key, `0xD6F` is MUTE). The main loop feeds accepted codes into a **multi-tap texting engine** — press 4 twice for "h", old-phone style — draws the message live on a **128×128 SSD1351 OLED** over SPI, and on MUTE ships it as a `'$'`-terminated byte stream over **UART1** to a second CC3200 running the same firmware, which prints it on *its* screen. Two boards, two remotes, SMS from 2003.
 
-![Wiring diagram](docs/wiring-diagram.svg)
+The interesting part isn't the OLED plumbing — it's how little state the whole thing runs on. The ISR is nothing but a **shift register with a stopwatch**: one `data` int, one edge counter, two flags (`reading_data` for frame-in-progress, `pin_out_intflag` for frame-done). Every decision that feels like it needs a timer callback — "is this a repeat frame?", "same key again, or a new letter?" — is made *lazily in the main loop* by comparing against `global_time`, a coarse 40 ms-step clock that the same SysTick maintains as a side job (it counts only uninterrupted 40 ms periods, because every falling IR edge restarts the count). Even the multi-tap commit is lazy: the letter you're cycling through is drawn on screen immediately but only lands in the message buffer **when the next keypress proves you're done with it**.
+
+<p align="center"><img src="docs/wiring-diagram.svg" alt="Wiring diagram of the IR Signal Decoder, with pins as set in pin_mux_config.c. A CC3200 LaunchPad sits in the centre. On its left, an IR receiver that takes IR light from the remote connects OUT to PIN_58, VCC to 3V3 and GND to GND. On its right, an Adafruit SSD1351 128 x 128 RGB565 OLED runs on SPI at 100 kHz: VIN to 3V3, GND to GND, SI (MOSI) to PIN_07, CL (SCK) to PIN_05, OC (CS) to PIN_18, DC to PIN_45, R (RST) to PIN_08. At the lower left, a USB debug console on the on-board USB backchannel uses UART0 at 115200 8N1: PIN_55 TX0 to console RX, PIN_57 RX0 to console TX. At the lower right, a second CC3200 running the same firmware uses UART1 at 115200 8N1 with '$'-terminated messages: PIN_01 TX1 to its PIN_02 RX1, PIN_02 RX1 to its PIN_01 TX1, GND to GND. PIN_50 (GSPI_CS) and PIN_06 (GSPI_MISO) are configured but not wired; the OLED's CS and DC are driven by GPIO." width="100%"></p>
 
 ---
 
@@ -25,27 +27,7 @@ The interesting part isn't the OLED plumbing — it's how little state the whole
 
 ## How a Keypress Becomes a Character
 
-```mermaid
-flowchart TD
-    IR["IR demodulator on PIN_58<br/>both-edge GPIO interrupt"] --> EDGE{"falling or<br/>rising edge?"}
-    EDGE -- "falling — burst starts" --> RST["reset SysTick current count<br/>(first edge also zeroes data + edge_counter)"]
-    EDGE -- "rising — burst ends" --> DELTA["delta = low-pulse width in µs"]
-    DELTA --> WHICH{"which edge<br/>of the frame?"}
-    WHICH -- "edge 0, delta ≤ 2000 µs" --> ABORT["not a start bit — abort frame"]
-    WHICH -- "edge 0, delta > 2000 µs" --> OPEN["frame open"]
-    WHICH -- "edges 1–12" --> BIT["data &lt;&lt;= 1<br/>delta ≤ 1000 µs → data |= 1"]
-    BIT --> FULL{"13 edges<br/>seen?"}
-    FULL -- "yes" --> FLAG["pin_out_intflag = 1 —<br/>12-bit code ready for the loop"]
-    FLAG --> GATE{"main loop:<br/>≥ 200 ms since last code?"}
-    GATE -- "no — repeat frame" --> DROP["ignored"]
-    GATE -- "yes" --> COMMIT{"different button, or same<br/>button after 1500 ms?"}
-    COMMIT -- "yes" --> APPEND["commit pending letter to msg[],<br/>x += 6, cycle = 0"]
-    COMMIT -- "no — still cycling" --> CYCLE["cycle++ — next letter<br/>of the same key"]
-    APPEND --> SW["switch on the code:<br/>letter · space · caps · delete · send"]
-    CYCLE --> SW
-    SW -- "letter keys 2–9" --> DRAW["drawChar at (x, 64)<br/>white on black, live preview"]
-    SW -- "MUTE 0xD6F" --> SEND["append '$' — UART1Send(msg)<br/>+ Report to the console"]
-```
+<p align="center"><img src="docs/keypress-to-character.svg" alt="Flowchart of one keypress in two lanes. In the GPIO interrupt, which runs on every PIN_58 edge, a falling edge restarts the SysTick stopwatch (80 MHz, 3,200,000-tick reload = 40 ms) and, if no frame is open, opens one with data and edge_counter at 0. A rising edge, while a frame is open, measures the low pulse in microseconds. Edge 0 must be longer than 2000 µs or the frame aborts; edges 1 to 12 shift data left and OR in a 1 for pulses of 1000 µs or less. Once 13 edges are counted, pin_out_intflag is set and the code stays in data. In the main loop, while(1) polls the flag and drops any code that comes less than 200 ms of global_time after the last accepted one; an accepted code first wipes row 64 if a message was just sent. A new key, or the same key after 1500 ms, commits the pending letter to msg and moves x by 6 unless the previous key was caps, LAST or MUTE; otherwise curr_cycle is incremented. A switch then handles keys 2 to 9 (multi-tap letters, uppercase with caps lock), 0 (space), 1 (caps toggle), LAST (delete, with no cycle reset) and MUTE (append '$', Report to the console, UART1Send, message_sent). Every key except MUTE and caps draws curr_letter at (x, 64) on the OLED, white on black in one 6 x 8 px cell, and the loop continues after the UART1 poll." width="100%"></p>
 
 The same loop also polls UART1: when bytes from the peer board arrive, `UART1Receive` collects up to 20 characters (or until `'$'`), and the message is drawn along the top row of the OLED — received text on top, your own composition mid-screen.
 
@@ -56,7 +38,12 @@ IRSignalDecoder/
 ├── README.md               # you are here
 ├── SYSTEM-DESIGN.md        # the architecture-level view
 ├── docs/
-│   └── wiring-diagram.svg  # the schematic above
+│   ├── system-overview.svg          # the overview at the top
+│   ├── wiring-diagram.svg           # the schematic above
+│   ├── keypress-to-character.svg    # one keypress, edge by edge, ISR to OLED
+│   ├── system-design-flowchart.svg  # SYSTEM-DESIGN end-to-end flowchart
+│   ├── typing-hi.svg                # SYSTEM-DESIGN deep dive: typing "hi" and sending it
+│   └── ir-frame.svg                 # SYSTEM-DESIGN deep dive: anatomy of an IR frame
 ├── main.c                  # all the project-authored logic: IR ISR, SysTick clocks,
 │                           #   multi-tap engine, UART1 link, main loop
 ├── pin_mux_config.c/.h     # TI PinMux-generated pin routing (IR input, GSPI, both UARTs,
@@ -73,13 +60,12 @@ IRSignalDecoder/
 ├── targetConfigs/          # CC3200 debug-probe configuration (CC3200.ccxml)
 ├── .launches/              # CCS debug launch config
 ├── Debug/                  # build artifacts, checked in (lab3-pt4.bin/.out/.map)
-├── README.html             # TI's original uart_demo readme — an SDK leftover
-└── FILELIST.txt            # generated file listing (tooling artifact)
+└── README.html             # TI's original uart_demo readme — an SDK leftover
 ```
 
 ## The Wiring
 
-Everything below is read straight out of [pin_mux_config.c](pin_mux_config.c) and [main.c](main.c) — see the [schematic](docs/wiring-diagram.svg):
+Everything below is read out of [pin_mux_config.c](pin_mux_config.c), [main.c](main.c) and [Adafruit_OLED.c](Adafruit_OLED.c) (which assigns the CS/DC/RESET roles) — see the [schematic](docs/wiring-diagram.svg):
 
 | Signal | CC3200 pin | Peripheral / GPIO | Goes to |
 |---|---|---|---|
@@ -92,7 +78,7 @@ Everything below is read straight out of [pin_mux_config.c](pin_mux_config.c) an
 | Board-to-board TX | **PIN_01** | UART1 TX, 115200 8N1 | peer's PIN_02 |
 | Board-to-board RX | **PIN_02** | UART1 RX | peer's PIN_01 |
 | Debug console | **PIN_55 / PIN_57** | UART0 TX/RX | LaunchPad USB backchannel |
-| — | PIN_50, PIN_06 | GSPI CS / MISO | configured, unused (see sharp edges) |
+| — | PIN_50, PIN_06 | GSPI CS / MISO | configured, not wired (see sharp edges) |
 
 The IR receiver is a demodulating module (the kind sold for 38 kHz TV-remote work) whose output idles high and pulls low for each IR burst — that polarity is baked into the ISR, which treats the falling edge as burst-start. The remote used here produces **12-bit codes**, captured by hand and recorded in a comment block at the top of `main.c` ("Binary & HEX from manual decoding").
 
@@ -104,9 +90,9 @@ The framing rules, in full:
 
 - **Edge 0 is the start bit** — a low pulse that must exceed **2000 µs**, or the frame is aborted on the spot.
 - **Edges 1–12 are data** — `data <<= 1`, and a pulse **≤ 1000 µs** shifts in a `1` (long pulse = `0`). This is pulse-*width* coding, not NEC's pulse-distance coding.
-- **At the 13th edge** the frame is complete: `pin_out_intflag = 1` and the ISR goes quiet. The main loop picks the 12-bit code out of `data` at its leisure.
+- **At the 13th edge** (edge 12, the last data bit) the frame is complete: `pin_out_intflag = 1` and `reading_data` drops back to `false`. The main loop reads the 12-bit code straight out of `data`, so it has to get there before the next frame's first falling edge zeroes it.
 
-The same SysTick moonlights as a wall clock: its wrap handler adds 40 to `global_time` (milliseconds), which the main loop uses for the **200 ms repeat-suppression gate** (remotes retransmit while a button is held) and the **1500 ms multi-tap timeout**.
+The same SysTick moonlights as a coarse clock: its wrap handler adds 40 to `global_time` (milliseconds), which the main loop uses for the **200 ms repeat-suppression gate** (remotes retransmit while a button is held) and the **1500 ms multi-tap timeout**. It is not true wall time: every falling edge restarts the 40 ms countdown and throws away the partial period, so `global_time` counts only completed 40 ms periods and stands still while falling edges keep arriving less than 40 ms apart.
 
 Button map, verified against the `switch` in `main.c`:
 
@@ -123,7 +109,7 @@ Button map, verified against the `switch` in `main.c`:
 
 The clever bit is that **the pending letter is committed by the *next* keypress, not by a timer**. Pressing a key draws its current letter at `(x, 64)` immediately — cycling a key just redraws the same cell — but `msg[]` only grows when a *different* button arrives (or the same one after 1500 ms), at which point the pending letter is appended, `x` advances one 6-pixel cell, and the cycle counter resets. Pressing MUTE is itself "a different button", so it commits the last letter before appending the `'$'` terminator and transmitting — nothing is ever lost to a missing timeout handler.
 
-Three buttons are special-cased out of the commit rule (the condition excludes `prev_data` ∈ {caps, send, delete}), and caps-lock even carries a small `curr_cycle--` compensation so that toggling case mid-word doesn't eat a tap. Case itself is one subtraction: `curr_letter = 'a' + cycle - (caps_lock * 32)`.
+Three buttons are special-cased out of the commit rule (the condition excludes `prev_data` ∈ {caps, send, delete}), and caps-lock even carries a small `curr_cycle--` compensation so that toggling case mid-word doesn't eat a tap. Case itself is one subtraction: `curr_letter = 'a' + curr_cycle - (caps_lock * 32)`.
 
 Delete (`LAST`) commits the pending letter, removes the last character of `msg`, steps `x` back a cell, and draws a space over the dead glyph — a visual backspace with no framebuffer, because the SSD1351's RAM *is* the framebuffer.
 
@@ -131,8 +117,8 @@ Delete (`LAST`) commits the pending letter, removes the last character of `msg`,
 
 Three layers, top to bottom:
 
-- **[Adafruit_GFX.c](Adafruit_GFX.c)** — the classic Adafruit graphics core ported from C++ to C. The app really only uses `drawChar` (5×7 glyphs from [glcdfont.h](glcdfont.h) in a 6×8 cell), `fillRect`, and `fillScreen`.
-- **[Adafruit_OLED.c](Adafruit_OLED.c)** — the SSD1351 driver. `writeCommand`/`writeData` wrap every single byte in a GPIO chip-select assert (PIN_18 low), a hardware `SPICSEnable`, one `SPIDataPut`, a dummy `SPIDataGet` to drain the RX FIFO, and the reverse. `Adafruit_Init` runs the panel bring-up sequence (command lock, clock div, remap `0x74`, contrast, VSL…) after a GPIO reset pulse on PIN_08.
+- **[Adafruit_GFX.c](Adafruit_GFX.c)** — the classic Adafruit graphics core ported from C++ to C. From this file the app really only uses `drawChar` (5×7 glyphs from [glcdfont.h](glcdfont.h) in a 6×8 cell, painted pixel by pixel through the driver's `drawPixel`); the port's own `fillRect` and `fillScreen` are commented out.
+- **[Adafruit_OLED.c](Adafruit_OLED.c)** — the SSD1351 driver. `writeCommand`/`writeData` wrap every single byte in a GPIO chip-select assert (PIN_18 low), a hardware `SPICSEnable`, one `SPIDataPut`, a dummy `SPIDataGet` to drain the RX FIFO, and the reverse. `Adafruit_Init` runs the panel bring-up sequence (command lock, clock div, remap `0x74`, contrast, VSL…) after a GPIO reset pulse on PIN_08. The driver also supplies the `drawPixel`, `fillRect`, and `fillScreen` the app actually links — `fillRect`/`fillScreen` are direct SSD1351 window fills.
 - **GSPI** — configured in `main.c` at **100 kHz, mode 0, 8-bit words, software-controlled active-high CS**.
 
 Screen real estate is two one-line mailboxes: **row `y=0`** shows the last message received from the peer, **row `y=64`** shows the message being composed, both white-on-black (`0xFFFF` on `0x0000`). `fillRect(0, y, 128, 9, 0x0000)` is the eraser.
@@ -148,8 +134,8 @@ The UART0 console (TI's [uart_if.c](uart_if.c), 115200 8N1 over the LaunchPad's 
 Honest requirements — this is a Code Composer Studio project for real hardware; there is no simulator, no host build, and no test suite:
 
 - **Hardware**: a TI **CC3200 LaunchPad** (two for messaging), an Adafruit **SSD1351 128×128 OLED**, a demodulating **IR receiver module**, and a TV remote that emits the 12-bit codes above (or re-capture your own and edit the `switch`).
-- **Code Composer Studio** — the project was built with **CCS 7.3** and TI ARM compiler **16.9.4.LTS** (per [.cproject](.cproject)); newer CCS versions can import it.
-- **CC3200 SDK 1.5.0** — the project references it via the `CC3200_SDK_ROOT` path variable (originally `C:/ti/CC3200SDK_1.5.0/cc3200-sdk`). Two build inputs live *only* in the SDK: `startup_ccs.c` (a linked resource in [.project](.project)) and `uart_if.h`, plus `driverlib.a`.
+- **Code Composer Studio** — the project was built with **CCS 7.3** and TI ARM compiler **16.9.4.LTS** (per [.ccsproject](.ccsproject) and [.cproject](.cproject)); newer CCS versions can import it.
+- **CC3200 SDK 1.5.0** — the project references it via the `CC3200_SDK_ROOT` path variable (originally `C:/ti/CC3200SDK_1.5.0/cc3200-sdk`). Several build inputs live *only* in the SDK: `startup_ccs.c` (a linked resource in [.project](.project)), `uart_if.h` and every driverlib/`inc` header the sources include (`rom_map.h`, `gpio.h`, `spi.h`, `systick.h`, …), found through the include paths in [.cproject](.cproject), plus `driverlib.a`.
 
 Steps:
 
@@ -162,11 +148,11 @@ Steps:
 
 Honest notes — some are scope cuts, some are latent bugs the demo never hits:
 
-- **Receiving blocks everything.** Once the first byte arrives, `UART1Receive` spins until it has seen `'$'` or 20 bytes. A peer that dies mid-message (or line noise that eats the `'$'`) freezes the UI forever — the IR ISR still decodes, but the loop never returns to look. A 20-byte burst without a terminator also leaves the eventual `'$'` in the FIFO, which the next poll reads as an empty message.
+- **Receiving blocks everything.** Once the first byte arrives, `UART1Receive` spins until it has seen `'$'` or 20 bytes. A peer that dies mid-message (or line noise that eats the `'$'`) freezes the UI forever — the IR ISR still decodes, but the loop never returns to look. A message of 20 or more characters is also split: `UART1Receive` returns at the cap with the rest still in the FIFO, and the next poll reads that tail as a fresh message that wipes the top row. For a message of exactly 20 characters the tail is just the `'$'`, so it arrives empty.
 - **`msg[50]` has no bounds check.** The commit path appends without limits; type past ~48 characters and it overflows into whatever global the linker placed next. You'd never notice from the screen, because the display gives out first: `x` advances 6 px per character and `drawChar` clips at column 128, so everything after the ~21st character is composed blind — but still transmitted.
 - **A truncated IR frame desynchronizes the decoder.** If a transmission dies before 13 edges, `reading_data` stays `true` and the *next* frame's start bit is swallowed as a data bit — codes come out garbled until edge counts realign. The comments describe a SysTick-based "transmission ended" reset (`systick_cnt`), but nothing in the decode path ever reads it; the timeout is half-wired.
 - **Multi-tap resumes mid-cycle after a delete.** Send and caps reset/compensate the cycle counter; delete doesn't. The first tap of a letter key right after LAST yields the *second* letter of its group ('b' where you expect 'a').
-- **Holding a button types the alphabet.** Repeat suppression is a single 200 ms window on a clock with 40 ms resolution — hold a key and the remote's repeat frames land as fresh presses, cycling the letter under your thumb.
+- **Holding a button may cycle its letters.** Repeat suppression is a single 200 ms window on `global_time`, which only advances through IR-quiet gaps of at least 40 ms. If the remote's repeat frames leave gaps that long, some of them land as fresh presses of the same key, cycling the letter under your thumb (never committing it: same key, within 1500 ms). The repo doesn't record the remote's repeat spacing.
 - **The chip-select is doubled and half of it goes nowhere.** Every byte toggles both the hardware GSPI CS (PIN_50, configured active-high, software-controlled) and the GPIO CS on PIN_18 — but only PIN_18 is wired to the OLED. PIN_50 and PIN_06 (MISO) are muxed and dangling.
 - **The driver's own comment disagrees with the wiring.** `Adafruit_OLED.c` says RESET is "wired to GPIO28, pin 18" — in this code GPIO28/PIN_18 is chip select, and RESET is GPIO17/PIN_08.
 - **100 kHz SPI is leisurely.** A full-screen fill is 32,768 data bytes, each wrapped in its own CS dance and dummy FIFO read — the boot-time `fillScreen` visibly crawls. Single-row updates are why the UI stays usable.

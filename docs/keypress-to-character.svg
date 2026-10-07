@@ -1,0 +1,271 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 2018" width="1000" height="2018" role="img" aria-label="How one TV-remote keypress becomes a character, from main.c. In the GPIO interrupt, which runs on every edge of PIN_58: a falling edge clears the SysTick count and, if no frame is open, opens one by setting reading_data and zeroing data and edge_counter; a rising edge, only while a frame is open, measures the low pulse in microseconds from the SysTick count. Edge 0 must be longer than 2000 microseconds or the frame is aborted; edges 1 to 12 each shift one bit into data, a pulse of at most 1000 microseconds giving a 1. Both the start bit and each data bit then increment edge_counter; at 13 the frame is complete, pin_out_intflag is set and the decoder resets; otherwise the interrupt returns and waits for the next edge. The main loop polls the flag, drops any code that arrives less than 200 ms after the last accepted one, wipes the composing row after a send, then either commits the pending letter (a new key, or the same key after 1500 ms, unless the previous key was caps, LAST or MUTE) or advances the multi-tap cycle. A switch maps the code: keys 2 to 9 pick a letter, 0 is space, 1 toggles caps lock, LAST deletes without resetting the cycle count, MUTE appends a dollar sign and sends the message over UART1. Every code except MUTE and caps is then drawn with drawChar at (x, 64) on the OLED, and the loop starts its next pass.">
+  <style>
+    .bg{fill:#ffffff}
+    .title{fill:#1f2328;font:600 22px -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
+    .sub{fill:#59636e;font:14px -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
+    .lbl{fill:#1f2328;font:600 14px -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
+    .note{fill:#59636e;font:12px -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
+    .glbl{fill:#59636e;font:600 12px -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;letter-spacing:.06em}
+    .elbl{fill:#59636e;font:11px -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
+    .edge{stroke:#818b98;stroke-width:1.6;fill:none}
+    .edge-dash{stroke:#818b98;stroke-width:1.6;fill:none;stroke-dasharray:6 4}
+    .arrow{fill:#818b98}
+    .group{fill:none;stroke:#d1d9e0;stroke-width:1.2;stroke-dasharray:4 4}
+    .b-blue{fill:#ddf4ff;stroke:#54aeff;stroke-width:1.5}
+    .b-green{fill:#dafbe1;stroke:#4ac26b;stroke-width:1.5}
+    .b-purple{fill:#fbefff;stroke:#c297ff;stroke-width:1.5}
+    .b-orange{fill:#fff1e5;stroke:#fb8f44;stroke-width:1.5}
+    .b-gray{fill:#f6f8fa;stroke:#d1d9e0;stroke-width:1.5}
+    .dot{fill:#59636e}
+    @media (prefers-color-scheme: dark){
+      .bg{fill:#0d1117}
+      .title,.lbl{fill:#e6edf3}
+      .sub,.note,.glbl,.elbl{fill:#9198a1}
+      .edge,.edge-dash{stroke:#9198a1}
+      .arrow{fill:#9198a1}
+      .group{stroke:#3d444d}
+      .b-blue{fill:#0c2d6b;stroke:#4493f8}
+      .b-green{fill:#0f3b1e;stroke:#3fb950}
+      .b-purple{fill:#2e1a4f;stroke:#ab7df8}
+      .b-orange{fill:#3d1f0a;stroke:#f0883e}
+      .b-gray{fill:#151b23;stroke:#3d444d}
+      .dot{fill:#9198a1}
+    }
+  </style>
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="arrow" d="M0,0 L10,5 L0,10 z"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" width="1000" height="2018" rx="12"/>
+  <text class="title" x="32" y="48">IR Signal Decoder — how a keypress becomes a character</text>
+  <text class="sub" x="32" y="74">One button press: decoded edge by edge in the GPIO interrupt, then multi-tapped into a letter and drawn.</text>
+
+  <!-- ===================== interrupt context ===================== -->
+  <rect class="group" x="24" y="92" width="952" height="624" rx="12"/>
+  <text class="glbl" x="40" y="112">INTERRUPT CONTEXT — GPIOA0IntHandler RUNS ON EVERY PIN_58 EDGE</text>
+
+  <rect class="b-orange" x="330" y="124" width="360" height="68" rx="10"/>
+  <text class="lbl" x="510" y="146" text-anchor="middle">IR demodulator output → PIN_58</text>
+  <text class="note" x="510" y="164" text-anchor="middle">GPIO input on GPIOA0, pin mask 0x8</text>
+  <text class="note" x="510" y="180" text-anchor="middle">interrupt on both edges → GPIOA0IntHandler</text>
+
+  <rect class="b-orange" x="728" y="124" width="232" height="68" rx="10"/>
+  <text class="lbl" x="844" y="146" text-anchor="middle">SysTick timer, 80 MHz</text>
+  <text class="note" x="844" y="164" text-anchor="middle">reload 3,200,000 ticks = 40 ms</text>
+  <text class="note" x="844" y="180" text-anchor="middle">each wrap: global_time += 40</text>
+
+  <path class="edge" d="M510,192 V212" marker-end="url(#ah)"/>
+  <polygon class="b-gray" points="510,216 630,244 510,272 390,244"/>
+  <text class="lbl" x="510" y="249" text-anchor="middle">falling or rising edge?</text>
+
+  <!-- falling: restart the stopwatch, open a frame -->
+  <path class="edge" d="M390,244 H193 V292" marker-end="url(#ah)"/>
+  <text class="elbl" x="290" y="236" text-anchor="middle">falling (pin reads low) — burst starts</text>
+  <rect class="b-blue" x="52" y="296" width="282" height="68" rx="10"/>
+  <text class="lbl" x="193" y="318" text-anchor="middle">restart the SysTick stopwatch</text>
+  <text class="note" x="193" y="336" text-anchor="middle">NVIC_ST_CURRENT = 1 · if no frame is open:</text>
+  <text class="note" x="193" y="352" text-anchor="middle">reading_data = true, data = edge_counter = 0</text>
+
+  <!-- rising: measure the low pulse -->
+  <path class="edge" d="M510,272 V292" marker-end="url(#ah)"/>
+  <text class="elbl" x="518" y="287">rising — burst ends</text>
+  <rect class="b-blue" x="350" y="296" width="320" height="68" rx="10"/>
+  <text class="lbl" x="510" y="318" text-anchor="middle">measure the low pulse</text>
+  <text class="note" x="510" y="336" text-anchor="middle">delta = TICKS_TO_US(3,200,000 − SysTick value)</text>
+  <text class="note" x="510" y="352" text-anchor="middle">only while a frame is open (reading_data)</text>
+
+  <path class="edge-dash" d="M844,192 V330 H674" marker-end="url(#ah)"/>
+  <text class="elbl" x="852" y="258">ticks elapsed since</text>
+  <text class="elbl" x="852" y="272">the falling edge</text>
+
+  <path class="edge" d="M510,364 V384" marker-end="url(#ah)"/>
+  <polygon class="b-gray" points="510,388 640,416 510,444 380,416"/>
+  <text class="lbl" x="510" y="421" text-anchor="middle">which edge of the frame?</text>
+
+  <path class="edge" d="M380,416 H193 V476" marker-end="url(#ah)"/>
+  <text class="elbl" x="286" y="408" text-anchor="middle">edge 0, delta ≤ 2000 µs</text>
+  <path class="edge" d="M510,444 V476" marker-end="url(#ah)"/>
+  <text class="elbl" x="518" y="465">edge 0, delta &gt; 2000 µs</text>
+  <path class="edge" d="M640,416 H826 V476" marker-end="url(#ah)"/>
+  <text class="elbl" x="733" y="408" text-anchor="middle">edges 1–12</text>
+
+  <rect class="b-blue" x="52" y="480" width="282" height="68" rx="10"/>
+  <text class="lbl" x="193" y="502" text-anchor="middle">not a start bit — abort</text>
+  <text class="note" x="193" y="520" text-anchor="middle">reading_data = false</text>
+  <text class="note" x="193" y="536" text-anchor="middle">edge_counter = 0</text>
+
+  <rect class="b-blue" x="390" y="480" width="240" height="68" rx="10"/>
+  <text class="lbl" x="510" y="502" text-anchor="middle">start bit accepted</text>
+  <text class="note" x="510" y="520" text-anchor="middle">no data bit is stored for it</text>
+  <text class="note" x="510" y="536" text-anchor="middle">12 data pulses follow</text>
+
+  <rect class="b-blue" x="690" y="480" width="272" height="68" rx="10"/>
+  <text class="lbl" x="826" y="502" text-anchor="middle">shift in one data bit</text>
+  <text class="note" x="826" y="520" text-anchor="middle">data &lt;&lt;= 1</text>
+  <text class="note" x="826" y="536" text-anchor="middle">delta ≤ 1000 µs → data |= 1 (short = 1)</text>
+
+  <!-- both counted paths merge into edge_counter++ -->
+  <path class="edge" d="M510,548 V576" marker-end="url(#ah)"/>
+  <path class="edge" d="M826,548 V560 H510"/>
+  <circle class="dot" cx="510" cy="560" r="3"/>
+  <rect class="b-blue" x="430" y="580" width="160" height="36" rx="10"/>
+  <text class="lbl" x="510" y="603" text-anchor="middle">edge_counter++</text>
+
+  <path class="edge" d="M510,616 V632" marker-end="url(#ah)"/>
+  <polygon class="b-gray" points="510,636 620,664 510,692 400,664"/>
+  <text class="lbl" x="510" y="669" text-anchor="middle">13 edges counted?</text>
+  <path class="edge" d="M620,664 H686" marker-end="url(#ah)"/>
+  <text class="elbl" x="653" y="656" text-anchor="middle">yes</text>
+  <text class="elbl" x="390" y="656" text-anchor="end">no</text>
+
+  <rect class="b-blue" x="690" y="630" width="272" height="68" rx="10"/>
+  <text class="lbl" x="826" y="652" text-anchor="middle">frame complete</text>
+  <text class="note" x="826" y="670" text-anchor="middle">pin_out_intflag = 1 · code stays in data</text>
+  <text class="note" x="826" y="686" text-anchor="middle">reading_data = false · edge_counter = 0</text>
+
+  <!-- every other path returns from the ISR -->
+  <path class="edge" d="M400,664 H40 V158 H326" marker-end="url(#ah)"/>
+  <path class="edge" d="M52,330 H40"/>
+  <path class="edge" d="M52,514 H40"/>
+  <circle class="dot" cx="40" cy="330" r="3"/>
+  <circle class="dot" cx="40" cy="514" r="3"/>
+  <text class="elbl" x="183" y="150" text-anchor="middle">ISR returns — the next edge re-enters</text>
+
+  <!-- ===================== handoff ===================== -->
+  <path class="edge-dash" d="M826,698 V798 H674" marker-end="url(#ah)"/>
+  <text class="elbl" x="834" y="730">flag polled by while(1)</text>
+
+  <!-- ===================== main loop ===================== -->
+  <rect class="group" x="24" y="740" width="952" height="1200" rx="12"/>
+  <text class="glbl" x="40" y="760">MAIN LOOP — while(1) IN main(); TIMES ARE global_time (40 ms STEPS)</text>
+
+  <rect class="b-green" x="270" y="770" width="400" height="56" rx="10"/>
+  <text class="lbl" x="470" y="793" text-anchor="middle">while(1) polls pin_out_intflag</text>
+  <text class="note" x="470" y="811" text-anchor="middle">set → clear it; the 12-bit code is read from data</text>
+
+  <path class="edge" d="M470,826 V846" marker-end="url(#ah)"/>
+  <polygon class="b-gray" points="470,850 670,880 470,910 270,880"/>
+  <text class="lbl" x="470" y="885" text-anchor="middle">≥ 200 ms since last accepted code?</text>
+  <path class="edge" d="M270,880 H40"/>
+  <circle class="dot" cx="40" cy="880" r="3"/>
+  <text class="elbl" x="60" y="858">no — dropped (meant for a</text>
+  <text class="elbl" x="60" y="872">held key’s repeat frames)</text>
+
+  <path class="edge" d="M470,910 V930" marker-end="url(#ah)"/>
+  <text class="elbl" x="478" y="926">yes</text>
+  <rect class="b-green" x="290" y="934" width="360" height="68" rx="10"/>
+  <text class="lbl" x="470" y="956" text-anchor="middle">accept the code</text>
+  <text class="note" x="470" y="974" text-anchor="middle">prev_detection = global_time</text>
+  <text class="note" x="470" y="990" text-anchor="middle">after a send: wipe row 64, x = 6, empty msg</text>
+
+  <path class="edge" d="M470,1002 V1022" marker-end="url(#ah)"/>
+  <polygon class="b-gray" points="470,1026 670,1056 470,1086 270,1056"/>
+  <text class="lbl" x="470" y="1061" text-anchor="middle">new key, or same key after 1500 ms?</text>
+  <path class="edge" d="M670,1056 H836 V1102" marker-end="url(#ah)"/>
+  <text class="elbl" x="680" y="1048">no — same key within 1500 ms</text>
+
+  <path class="edge" d="M470,1086 V1106" marker-end="url(#ah)"/>
+  <text class="elbl" x="478" y="1102">yes</text>
+  <polygon class="b-gray" points="470,1110 650,1140 470,1170 290,1140"/>
+  <text class="lbl" x="470" y="1145" text-anchor="middle">previous key caps, LAST or MUTE?</text>
+  <path class="edge" d="M650,1140 H708" marker-end="url(#ah)"/>
+  <text class="elbl" x="679" y="1132" text-anchor="middle">yes</text>
+
+  <rect class="b-green" x="712" y="1106" width="248" height="68" rx="10"/>
+  <text class="lbl" x="836" y="1128" text-anchor="middle">no commit: curr_cycle++</text>
+  <text class="note" x="836" y="1146" text-anchor="middle">same key: next letter of its group</text>
+  <text class="note" x="836" y="1162" text-anchor="middle">after caps or MUTE: first letter</text>
+
+  <path class="edge" d="M470,1170 V1190" marker-end="url(#ah)"/>
+  <text class="elbl" x="478" y="1186">no</text>
+  <rect class="b-green" x="300" y="1194" width="340" height="68" rx="10"/>
+  <text class="lbl" x="470" y="1216" text-anchor="middle">commit the pending letter</text>
+  <text class="note" x="470" y="1234" text-anchor="middle">msg[] += curr_letter · x += 6</text>
+  <text class="note" x="470" y="1250" text-anchor="middle">curr_cycle = 0</text>
+
+  <path class="edge" d="M470,1262 V1282" marker-end="url(#ah)"/>
+  <path class="edge" d="M836,1174 V1320 H694" marker-end="url(#ah)"/>
+  <rect class="b-green" x="250" y="1286" width="440" height="68" rx="10"/>
+  <text class="lbl" x="470" y="1308" text-anchor="middle">switch (data) — one case per button</text>
+  <text class="note" x="470" y="1326" text-anchor="middle">first, on both paths: prev_data = data, last press = now</text>
+  <text class="note" x="470" y="1342" text-anchor="middle">a code with no case keeps the old curr_letter</text>
+
+  <!-- switch cases: trunk on the left, collector on the right -->
+  <path class="edge" d="M280,1354 V1700"/>
+  <path class="edge" d="M280,1412 H316" marker-end="url(#ah)"/>
+  <path class="edge" d="M280,1484 H316" marker-end="url(#ah)"/>
+  <path class="edge" d="M280,1550 H316" marker-end="url(#ah)"/>
+  <path class="edge" d="M280,1622 H316" marker-end="url(#ah)"/>
+  <path class="edge" d="M280,1700 H316" marker-end="url(#ah)"/>
+  <circle class="dot" cx="280" cy="1412" r="3"/>
+  <circle class="dot" cx="280" cy="1484" r="3"/>
+  <circle class="dot" cx="280" cy="1550" r="3"/>
+  <circle class="dot" cx="280" cy="1622" r="3"/>
+
+  <rect class="b-green" x="320" y="1378" width="420" height="68" rx="10"/>
+  <text class="lbl" x="530" y="1400" text-anchor="middle">keys 2–9 → a letter (multi-tap)</text>
+  <text class="note" x="530" y="1418" text-anchor="middle">curr_cycle %= 3, or %= 4 on keys 7 (pqrs) and 9 (wxyz)</text>
+  <text class="note" x="530" y="1434" text-anchor="middle">curr_letter = first letter + curr_cycle − 32 × caps_lock</text>
+
+  <rect class="b-green" x="320" y="1456" width="420" height="56" rx="10"/>
+  <text class="lbl" x="530" y="1479" text-anchor="middle">key 0 (0x6EF) → space</text>
+  <text class="note" x="530" y="1497" text-anchor="middle">curr_letter = ' '</text>
+
+  <rect class="b-green" x="320" y="1522" width="420" height="56" rx="10"/>
+  <text class="lbl" x="530" y="1545" text-anchor="middle">key 1 (0xFEF) → caps lock</text>
+  <text class="note" x="530" y="1563" text-anchor="middle">caps_lock = !caps_lock · curr_cycle--</text>
+
+  <rect class="b-green" x="320" y="1588" width="420" height="68" rx="10"/>
+  <text class="lbl" x="530" y="1610" text-anchor="middle">LAST (0x22F) → delete</text>
+  <text class="note" x="530" y="1628" text-anchor="middle">curr_letter = ' ' · if msg is not empty: drop its last char, x −= 6</text>
+  <text class="note" x="530" y="1644" text-anchor="middle">no curr_cycle reset: the next letter tap continues the old count</text>
+
+  <rect class="b-green" x="320" y="1666" width="420" height="68" rx="10"/>
+  <text class="lbl" x="530" y="1688" text-anchor="middle">MUTE (0xD6F) → send</text>
+  <text class="note" x="530" y="1706" text-anchor="middle">append '$' · Report it to the console · UART1Send(msg)</text>
+  <text class="note" x="530" y="1722" text-anchor="middle">message_sent = true · curr_cycle = −1</text>
+
+  <path class="edge" d="M740,1412 H764 V1754 H470 V1768" marker-end="url(#ah)"/>
+  <path class="edge" d="M740,1484 H764"/>
+  <path class="edge" d="M740,1550 H764"/>
+  <path class="edge" d="M740,1622 H764"/>
+  <path class="edge" d="M740,1700 H764"/>
+  <circle class="dot" cx="764" cy="1484" r="3"/>
+  <circle class="dot" cx="764" cy="1550" r="3"/>
+  <circle class="dot" cx="764" cy="1622" r="3"/>
+  <circle class="dot" cx="764" cy="1700" r="3"/>
+
+  <polygon class="b-gray" points="470,1772 580,1800 470,1828 360,1800"/>
+  <text class="lbl" x="470" y="1805" text-anchor="middle">MUTE or caps key?</text>
+  <path class="edge" d="M360,1800 H40"/>
+  <circle class="dot" cx="40" cy="1800" r="3"/>
+  <text class="elbl" x="200" y="1792" text-anchor="middle">yes — nothing is drawn</text>
+
+  <path class="edge" d="M470,1828 V1848" marker-end="url(#ah)"/>
+  <text class="elbl" x="478" y="1844">no</text>
+  <rect class="b-orange" x="270" y="1852" width="400" height="68" rx="10"/>
+  <text class="lbl" x="470" y="1874" text-anchor="middle">drawChar(x, 64, curr_letter) → OLED</text>
+  <text class="note" x="470" y="1892" text-anchor="middle">white on black, one 6 × 8 px cell (5 × 7 glyph)</text>
+  <text class="note" x="470" y="1908" text-anchor="middle">live preview: cycling a key redraws the same cell</text>
+
+  <!-- back to the top of while(1) -->
+  <path class="edge" d="M270,1886 H40 V798 H266" marker-end="url(#ah)"/>
+  <text class="elbl" x="155" y="790" text-anchor="middle">next pass (after the UART1 poll)</text>
+
+  <!-- ===================== legend ===================== -->
+  <text class="glbl" x="40" y="1974">LEGEND</text>
+  <rect class="b-blue" x="130" y="1952" width="26" height="14" rx="4"/>
+  <text class="note" x="166" y="1963">GPIO interrupt step</text>
+  <rect class="b-green" x="380" y="1952" width="26" height="14" rx="4"/>
+  <text class="note" x="416" y="1963">main-loop step</text>
+  <rect class="b-orange" x="630" y="1952" width="26" height="14" rx="4"/>
+  <text class="note" x="666" y="1963">hardware: IR demodulator, SysTick, OLED</text>
+  <polygon class="b-gray" points="143,1978 157,1986 143,1994 129,1986"/>
+  <text class="note" x="166" y="1990">decision</text>
+  <path class="edge" d="M380,1986 H406" marker-end="url(#ah)"/>
+  <text class="note" x="416" y="1990">control flow (dot = paths join)</text>
+  <path class="edge-dash" d="M630,1986 H656" marker-end="url(#ah)"/>
+  <text class="note" x="666" y="1990">value read, not control flow</text>
+</svg>
